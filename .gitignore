@@ -1,0 +1,137 @@
+# ═══════════════════════════════════════════════════════════════
+#  .gitignore — n8n Self-Hosted Docker Stack
+#  Security-first: secrets, credentials, and runtime data are
+#  NEVER committed to version control.
+# ═══════════════════════════════════════════════════════════════
+
+
+# ── ❌ SECRETS & CREDENTIALS (most critical) ──────────────────
+.env
+.env.*
+!.env.example          # ✅ keep the example template
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets/
+.secrets/
+credentials/
+private/
+
+
+# ── ❌ n8n RUNTIME DATA ───────────────────────────────────────
+# Never commit workflow data, credentials, or execution history
+n8n_data/
+.n8n/
+n8n_files/
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+n8n-database.sqlite
+
+
+# ── ❌ DATABASE VOLUMES & DUMPS ───────────────────────────────
+postgres_data/
+pgdata/
+*.sql.gz
+*.dump
+*.pgdump
+*.backup
+db_backup/
+backups/
+
+
+# ── ❌ REDIS PERSISTENCE ──────────────────────────────────────
+redis_data/
+dump.rdb
+appendonly.aof
+*.rdb
+
+
+# ── ❌ DOCKER RUNTIME ─────────────────────────────────────────
+# Local override files often contain secrets
+docker-compose.override.yml
+docker-compose.local.yml
+docker-compose.prod.yml     # prod configs stay out of repo
+.docker/
+
+
+# ── ❌ LOGS ───────────────────────────────────────────────────
+*.log
+*.log.*
+logs/
+log/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# ── ❌ NODE / NPM ─────────────────────────────────────────────
+node_modules/
+docker/n8n/custom-nodes/**/node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json          # regenerated; exposes dep tree unnecessarily
+yarn.lock                  # same reason — uncomment if you prefer to keep it
+.npm/
+.yarn/
+
+
+# ── ❌ BUILD ARTIFACTS ────────────────────────────────────────
+dist/
+build/
+*.tsbuildinfo
+docker/n8n/custom-nodes/**/dist/
+
+
+# ── ❌ OS & EDITOR JUNK ───────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+
+# ── ❌ CI/CD SENSITIVE FILES ──────────────────────────────────
+.github/workflows/secrets*
+kubeconfig
+kubeconfig.*
+*.tfvars               # Terraform variable files (often contain secrets)
+*.tfstate              # Terraform state (contains sensitive infra data)
+*.tfstate.backup
+.terraform/
+ansible-vault-password
+vault-password-file
+
+
+# ── ❌ MONITORING & MISC RUNTIME ──────────────────────────────
+prometheus_data/
+grafana_data/
+letsencrypt/
+certbot/
+acme/
+.cache/
+tmp/
+temp/

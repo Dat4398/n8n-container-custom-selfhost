@@ -1,0 +1,244 @@
+version: "3.8"
+
+# ─────────────────────────────────────────────
+#  n8n Self-Hosted — Production Stack
+#  RAM target : 4 GB VPS
+#  Queue mode : Redis  |  DB : PostgreSQL
+#  Workers    : scale=5
+#  DNS        : Google (8.8.8.8 / 8.8.4.4)
+# ─────────────────────────────────────────────
+
+x-n8n-common: &n8n-common
+  image: n8nio/n8n:latest
+  restart: unless-stopped
+  networks:
+    - n8n_net
+  dns:
+    - 8.8.8.8
+    - 8.8.4.4
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  environment:
+    # ── Database ──────────────────────────────
+    DB_TYPE: postgresdb
+    DB_POSTGRESDB_HOST: postgres
+    DB_POSTGRESDB_PORT: 5432
+    DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-n8n}
+    DB_POSTGRESDB_USER: ${POSTGRES_USER:-n8n}
+    DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-changeme_strong_password}
+
+    # ── Queue / Redis ─────────────────────────
+    EXECUTIONS_MODE: queue
+    QUEUE_BULL_REDIS_HOST: redis
+    QUEUE_BULL_REDIS_PORT: 6379
+    QUEUE_BULL_REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_redis_password}
+    QUEUE_HEALTH_CHECK_ACTIVE: "true"
+
+    # ── Encryption ────────────────────────────
+    N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-xxx}
+
+    # ── Basic Auth ────────────────────────────
+    N8N_BASIC_AUTH_ACTIVE: "true"
+    N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+    N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-changeme_admin_password}
+
+    # ── CORS ──────────────────────────────────
+    N8N_CORS_ALLOW_ORIGIN: "*"
+
+    # ── Host / URLs ───────────────────────────
+    N8N_HOST: ${N8N_HOST:-localhost}
+    N8N_PORT: 5678
+    N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+    WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+
+    # ── Timezone ──────────────────────────────
+    GENERIC_TIMEZONE: ${TIMEZONE:-Asia/Ho_Chi_Minh}
+    TZ: ${TIMEZONE:-Asia/Ho_Chi_Minh}
+
+    # ── Logging ───────────────────────────────
+    N8N_LOG_LEVEL: info
+    N8N_LOG_OUTPUT: console
+
+    # ── Performance / Memory ──────────────────
+    NODE_OPTIONS: "--max-old-space-size=512"
+    EXECUTIONS_DATA_PRUNE: "true"
+    EXECUTIONS_DATA_MAX_AGE: 168          # hours — 7 days
+    EXECUTIONS_DATA_PRUNE_MAX_COUNT: 10000
+
+# ─────────────────────────────────────────────
+services:
+
+  # ── PostgreSQL ──────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks:
+      - n8n_net
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-n8n}
+      POSTGRES_USER: ${POSTGRES_USER:-n8n}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_strong_password}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-n8n} -d ${POSTGRES_DB:-n8n}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ── Redis ────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - n8n_net
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-changeme_redis_password}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme_redis_password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  # ── n8n Main (Editor + Webhook) ──────────────
+  n8n:
+    <<: *n8n-common
+    container_name: n8n_main
+    command: n8n start
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - n8n_files:/files
+    environment:
+      <<: *n8n-common  # inherits, then override below
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-n8n}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-n8n}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-changeme_strong_password}
+      EXECUTIONS_MODE: queue
+      QUEUE_BULL_REDIS_HOST: redis
+      QUEUE_BULL_REDIS_PORT: 6379
+      QUEUE_BULL_REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_redis_password}
+      QUEUE_HEALTH_CHECK_ACTIVE: "true"
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-xxx}
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-changeme_admin_password}
+      N8N_CORS_ALLOW_ORIGIN: "*"
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      GENERIC_TIMEZONE: ${TIMEZONE:-Asia/Ho_Chi_Minh}
+      TZ: ${TIMEZONE:-Asia/Ho_Chi_Minh}
+      N8N_LOG_LEVEL: info
+      N8N_LOG_OUTPUT: console
+      NODE_OPTIONS: "--max-old-space-size=512"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: 168
+      EXECUTIONS_DATA_PRUNE_MAX_COUNT: 10000
+      # Main node also handles webhooks
+      N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN: "true"
+    deploy:
+      resources:
+        limits:
+          memory: 600m
+
+  # ── n8n Worker (scale=5) ─────────────────────
+  n8n_worker:
+    <<: *n8n-common
+    command: n8n worker --concurrency=5
+    volumes:
+      - n8n_data:/home/node/.n8n:ro
+      - n8n_files:/files
+    environment:
+      <<: *n8n-common  # inherits all common env
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-n8n}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-n8n}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-changeme_strong_password}
+      EXECUTIONS_MODE: queue
+      QUEUE_BULL_REDIS_HOST: redis
+      QUEUE_BULL_REDIS_PORT: 6379
+      QUEUE_BULL_REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_redis_password}
+      QUEUE_HEALTH_CHECK_ACTIVE: "true"
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-xxx}
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-changeme_admin_password}
+      N8N_CORS_ALLOW_ORIGIN: "*"
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      GENERIC_TIMEZONE: ${TIMEZONE:-Asia/Ho_Chi_Minh}
+      TZ: ${TIMEZONE:-Asia/Ho_Chi_Minh}
+      N8N_LOG_LEVEL: info
+      N8N_LOG_OUTPUT: console
+      NODE_OPTIONS: "--max-old-space-size=400"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: 168
+      EXECUTIONS_DATA_PRUNE_MAX_COUNT: 10000
+      WORKER_ID: "worker_{{.Task.Slot}}"
+    deploy:
+      replicas: 5
+      resources:
+        limits:
+          memory: 400m
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+
+# ─────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  n8n_data:
+    driver: local
+  n8n_files:
+    driver: local
+
+# ─────────────────────────────────────────────
+networks:
+  n8n_net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br_n8n
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
