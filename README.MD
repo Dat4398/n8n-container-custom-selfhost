@@ -26,3 +26,5 @@ chmod +x build.sh
 
 # 4. Push to a private registry (optional)
 REGISTRY=registry.yourdomain.com/n8n ./build.sh --push
+## Planning
+- See `SCALE_UP_REVIEW_AND_PLAN.md` for the scale-up review and phased implementation plan.
